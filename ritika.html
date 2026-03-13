@@ -1,0 +1,1923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wireless Power Transfer — Interactive Physics Lab</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Exo+2:ital,wght@0,200;0,300;0,400;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   RESET & CUSTOM PROPERTIES
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cyan:         #00e5ff;
+  --cyan-dim:     rgba(0, 229, 255, 0.12);
+  --cyan-border:  rgba(0, 229, 255, 0.25);
+  --amber:        #ffab40;
+  --amber-dim:    rgba(255, 171, 64, 0.15);
+  --green:        #69ff47;
+  --green-dim:    rgba(105, 255, 71, 0.12);
+  --red:          #ff4b4b;
+  --bg:           #050810;
+  --surface:      rgba(6, 11, 22, 0.90);
+  --surface-2:    rgba(10, 18, 35, 0.85);
+  --text:         #c4d8e8;
+  --text-dim:     rgba(196, 216, 232, 0.45);
+  --text-bright:  #e8f4ff;
+  --font-display: 'Rajdhani', sans-serif;
+  --font-mono:    'Share Tech Mono', monospace;
+  --font-body:    'Exo 2', sans-serif;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+#app {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* === Simulation Panel (Left) === */
+#sim-panel {
+  position: relative;
+  flex: 0 0 52%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+#three-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: block;
+}
+
+/* Corner decoration brackets */
+.corner { position: absolute; width: 18px; height: 18px; z-index: 5; }
+.corner.tl { top: 8px; left: 8px; border-top: 1.5px solid var(--cyan); border-left: 1.5px solid var(--cyan); }
+.corner.tr { top: 8px; right: 8px; border-top: 1.5px solid var(--cyan); border-right: 1.5px solid var(--cyan); }
+.corner.bl { bottom: 8px; left: 8px; border-bottom: 1.5px solid var(--cyan); border-left: 1.5px solid var(--cyan); }
+.corner.br { bottom: 8px; right: 8px; border-bottom: 1.5px solid var(--cyan); border-right: 1.5px solid var(--cyan); }
+
+/* === Glassmorphism base === */
+.glass {
+  background: var(--surface);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid var(--cyan-border);
+  border-radius: 6px;
+  box-shadow: 0 0 24px rgba(0,229,255,0.06), inset 0 1px 0 rgba(0,229,255,0.08);
+}
+
+/* ============================================================
+   DRAGGABLE PANEL TITLES — show move cursor on drag handles
+   ============================================================ */
+.drag-handle {
+  cursor: move;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.dragging-panel {
+  opacity: 0.92;
+  box-shadow: 0 0 32px rgba(0,229,255,0.18), inset 0 1px 0 rgba(0,229,255,0.15) !important;
+}
+
+/* ============================================================
+   STATUS READOUT (top-left, draggable)
+   ============================================================ */
+#status-panel {
+  position: absolute;
+  top: 14px; left: 14px;
+  width: 192px;
+  padding: 10px 13px;
+  z-index: 10;
+}
+
+.status-header {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 7px;
+}
+
+.pulse-dot {
+  width: 5px; height: 5px;
+  background: var(--cyan);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: pulseDot 1.8s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 5px var(--cyan); }
+  50%       { opacity: 0.3; box-shadow: none; }
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(0,229,255,0.06);
+}
+.status-row:last-child { border-bottom: none; }
+
+.s-label {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.s-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--cyan);
+  transition: color 0.4s;
+}
+.s-value.good    { color: var(--green); }
+.s-value.warn    { color: var(--amber); }
+.s-value.danger  { color: var(--red); }
+
+/* ============================================================
+   CONTROL PANEL (mid-left, floating)
+   ============================================================ */
+#control-panel {
+  position: absolute;
+  bottom: 228px;
+  left: 14px;
+  width: 272px;
+  padding: 13px 15px;
+  z-index: 10;
+}
+
+.cp-title {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-bottom: 13px;
+  display: flex; align-items: center; gap: 7px;
+}
+
+.cp-title::before {
+  content: '';
+  display: block;
+  width: 5px; height: 5px;
+  background: var(--cyan);
+  border-radius: 50%;
+  animation: pulseDot 1.8s ease-in-out infinite;
+}
+
+.slider-group { margin-bottom: 13px; }
+.slider-group:last-child { margin-bottom: 0; }
+
+.s-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 5px;
+}
+
+.s-name {
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.8px;
+}
+
+.s-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan);
+  min-width: 72px;
+  text-align: right;
+}
+
+/* Custom range sliders */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  background: rgba(0,229,255,0.14);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  position: relative;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px; height: 13px;
+  background: var(--cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--cyan), 0 0 16px rgba(0,229,255,0.3);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.35);
+  box-shadow: 0 0 12px var(--cyan), 0 0 24px rgba(0,229,255,0.4);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 13px; height: 13px;
+  background: var(--cyan);
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 0 8px var(--cyan);
+  cursor: pointer;
+}
+
+/* ============================================================
+   OSCILLOSCOPE PANEL (bottom, floating)
+   ============================================================ */
+#osc-panel {
+  position: absolute;
+  bottom: 14px; left: 14px; right: 14px;
+  height: 206px;
+  padding: 9px 11px;
+  z-index: 10;
+}
+
+.osc-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.osc-title {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 2.5px;
+  color: var(--cyan);
+  text-transform: uppercase;
+}
+
+.osc-badges { display: flex; gap: 6px; align-items: center; }
+
+.badge {
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.b-auto  { background: var(--green-dim);  border: 1px solid rgba(105,255,71,0.35);  color: var(--green); }
+.b-ch1   { background: rgba(255,208,0,0.1); border: 1px solid rgba(255,208,0,0.35); color: #ffd000; }
+.b-ch2   { background: rgba(0,162,255,0.1); border: 1px solid rgba(0,162,255,0.35); color: #00a2ff; }
+
+#osc-canvas {
+  display: block;
+  width: 100%;
+  background: #010608;
+  border-radius: 3px;
+  border: 1px solid rgba(0,229,255,0.1);
+}
+
+.osc-readouts {
+  display: flex;
+  gap: 14px;
+  margin-top: 5px;
+}
+
+.osc-r {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.8px;
+}
+
+/* Wave legend row */
+.osc-wave-legend {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 5px 0 2px;
+  border-top: 1px solid rgba(0,229,255,0.07);
+  margin-top: 4px;
+}
+
+.wave-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.wave-legend-line {
+  width: 24px;
+  height: 2.5px;
+  border-radius: 2px;
+}
+
+.wave-legend-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.wave-legend-detail {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  opacity: 0.55;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================================
+   HINT TOOLTIP (top-right of sim panel)
+   ============================================================ */
+#hint-label {
+  position: absolute;
+  top: 14px; right: 14px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  z-index: 5;
+}
+
+/* ============================================================
+   PRESENTATION PANEL (Right)
+   ============================================================ */
+#pres-panel {
+  flex: 1;
+  height: 100vh;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  border-left: 1px solid var(--cyan-border);
+  background:
+    linear-gradient(180deg, #04070e 0%, #060b18 40%, #04070e 100%);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,229,255,0.2) transparent;
+  position: relative;
+}
+
+#pres-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,229,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,0.025) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#pres-panel::-webkit-scrollbar { width: 3px; }
+#pres-panel::-webkit-scrollbar-track { background: transparent; }
+#pres-panel::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.2); border-radius: 2px; }
+
+/* Presentation inner wrapper */
+.pres-inner {
+  position: relative;
+  z-index: 1;
+  padding: 0 30px 80px 30px;
+  max-width: 640px;
+}
+
+/* Masthead */
+.pres-masthead {
+  padding: 26px 0 22px;
+  border-bottom: 1px solid var(--cyan-border);
+  margin-bottom: 0;
+}
+
+.mast-tag {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 4px;
+  color: var(--cyan);
+  opacity: 0.6;
+  margin-bottom: 10px;
+}
+
+.mast-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-bright);
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+
+.mast-sub {
+  font-size: 12.5px;
+  font-weight: 300;
+  color: var(--text-dim);
+  letter-spacing: 0.4px;
+}
+
+/* Table of contents */
+.pres-toc {
+  padding: 16px 0 20px;
+  border-bottom: 1px solid rgba(0,229,255,0.1);
+  margin-bottom: 0;
+}
+
+.toc-label {
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 3px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.toc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  cursor: pointer;
+  transition: color 0.2s;
+  border-radius: 3px;
+}
+
+.toc-item:hover .toc-text { color: var(--cyan); }
+.toc-item:hover .toc-num  { opacity: 1; }
+
+.toc-num {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--cyan);
+  opacity: 0.4;
+  min-width: 20px;
+  transition: opacity 0.2s;
+}
+
+.toc-text {
+  font-size: 12px;
+  font-weight: 300;
+  color: var(--text-dim);
+  letter-spacing: 0.3px;
+  transition: color 0.2s;
+}
+
+/* Sections */
+.pres-section {
+  padding: 36px 0 0;
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+.pres-section.vis { opacity: 1; transform: translateY(0); }
+
+.sec-tag {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: var(--cyan);
+  opacity: 0.55;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.sec-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-bright);
+  line-height: 1.25;
+  margin-bottom: 18px;
+}
+.sec-title em { color: var(--cyan); font-style: normal; }
+
+.sec-body {
+  font-size: 14.5px;
+  line-height: 1.84;
+  color: var(--text);
+  font-weight: 300;
+  margin-bottom: 16px;
+}
+.sec-body strong { color: var(--text-bright); font-weight: 600; }
+
+.sec-divider {
+  width: 32px; height: 1.5px;
+  background: linear-gradient(90deg, var(--cyan), transparent);
+  margin: 22px 0 0;
+}
+
+/* Formula blocks */
+.formula {
+  background: rgba(0,229,255,0.04);
+  border: 1px solid var(--cyan-border);
+  border-left: 3px solid var(--cyan);
+  border-radius: 4px;
+  padding: 12px 15px;
+  margin: 14px 0;
+}
+
+.formula-tag {
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.formula-eq {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  color: var(--cyan);
+  line-height: 1.6;
+}
+
+.formula-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 5px;
+  line-height: 1.5;
+}
+
+/* Callout boxes */
+.callout {
+  border-radius: 5px;
+  padding: 11px 14px;
+  margin: 14px 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.callout-tip {
+  background: var(--amber-dim);
+  border: 1px solid rgba(255,171,64,0.22);
+  color: #ffd080;
+}
+
+.callout-info {
+  background: var(--cyan-dim);
+  border: 1px solid var(--cyan-border);
+  color: #a8e8ff;
+}
+
+/* SVG Diagrams */
+.diagram {
+  background: rgba(0,8,20,0.6);
+  border: 1px solid rgba(0,229,255,0.12);
+  border-radius: 6px;
+  padding: 16px;
+  margin: 14px 0;
+}
+
+.diagram svg { max-width: 100%; }
+
+/* End marker */
+.pres-end {
+  padding: 30px 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pres-end-line { height: 1px; flex: 1; }
+.pres-end-text {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Loading overlay */
+#loading {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.5s ease;
+}
+
+.load-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+
+.load-sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 32px;
+}
+
+.load-bar-wrap {
+  width: 240px;
+  height: 2px;
+  background: rgba(0,229,255,0.1);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.load-bar {
+  width: 0%;
+  height: 100%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  transition: width 0.3s ease;
+  animation: loadFill 1.2s ease forwards;
+}
+
+@keyframes loadFill {
+  0%   { width: 0%; }
+  60%  { width: 80%; }
+  100% { width: 100%; }
+}
+</style>
+</head>
+
+<body>
+<div id="loading">
+  <div class="load-title">Wireless Power Lab</div>
+  <div class="load-sub">Initializing 3D Physics Engine</div>
+  <div class="load-bar-wrap"><div class="load-bar"></div></div>
+</div>
+
+<div id="app" style="opacity:0; transition: opacity 0.5s;">
+
+  <div id="sim-panel">
+    <canvas id="three-canvas"></canvas>
+
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <div id="hint-label">DRAG · SCROLL · ROTATE</div>
+
+    <div id="status-panel" class="glass">
+      <div class="status-header drag-handle"><div class="pulse-dot"></div>SYSTEM MONITOR</div>
+      <div class="status-row">
+        <span class="s-label">EFFICIENCY</span>
+        <span class="s-value good" id="sv-eff">--%</span>
+      </div>
+      <div class="status-row">
+        <span class="s-label">OUTPUT VOLTAGE</span>
+        <span class="s-value" id="sv-vout">-- V</span>
+      </div>
+      <div class="status-row">
+        <span class="s-label">COUPLING k</span>
+        <span class="s-value" id="sv-k">0.000</span>
+      </div>
+      <div class="status-row">
+        <span class="s-label">STATUS</span>
+        <span class="s-value good" id="sv-status">RESONANT</span>
+      </div>
+    </div>
+
+    <div id="control-panel" class="glass">
+      <div class="cp-title drag-handle">PARAMETER CONTROL</div>
+
+      <div class="slider-group">
+        <div class="s-row">
+          <span class="s-name">COIL DISTANCE</span>
+          <span class="s-val" id="vd">5.0 cm</span>
+        </div>
+        <input type="range" id="sl-dist" min="1" max="20" step="0.1" value="5">
+      </div>
+
+      <div class="slider-group">
+        <div class="s-row">
+          <span class="s-name">INPUT VOLTAGE</span>
+          <span class="s-val" id="vv">12.0 V</span>
+        </div>
+        <input type="range" id="sl-volt" min="5" max="50" step="0.5" value="12">
+      </div>
+
+      <div class="slider-group">
+        <div class="s-row">
+          <span class="s-name">FREQUENCY</span>
+          <span class="s-val" id="vf">150.0 kHz</span>
+        </div>
+        <input type="range" id="sl-freq" min="100" max="200" step="0.5" value="150">
+      </div>
+    </div>
+
+    <div id="osc-panel" class="glass">
+      <div class="osc-top">
+        <span class="osc-title">DUAL-CHANNEL OSCILLOSCOPE</span>
+        <div class="osc-badges">
+          <span class="badge b-auto">AUTO SET ✓</span>
+          <span class="badge b-ch1">▬ CH1 INPUT</span>
+          <span class="badge b-ch2">▬ CH2 OUTPUT</span>
+        </div>
+      </div>
+      <canvas id="osc-canvas"></canvas>
+      <div class="osc-wave-legend">
+        <div class="wave-legend-item">
+          <div class="wave-legend-line" style="background:#ffd000; box-shadow: 0 0 5px #ffd000;"></div>
+          <span class="wave-legend-label" style="color:#ffd000;">CH1 — Input Wave</span>
+          <span class="wave-legend-detail" style="color:#ffd000;">(Primary Coil / Power Source)</span>
+        </div>
+        <div class="wave-legend-item">
+          <div class="wave-legend-line" style="background:#00a2ff; box-shadow: 0 0 5px #00a2ff;"></div>
+          <span class="wave-legend-label" style="color:#00a2ff;">CH2 — Output Wave</span>
+          <span class="wave-legend-detail" style="color:#00a2ff;">(Receiver Coil / LED Load)</span>
+        </div>
+      </div>
+      <div class="osc-readouts">
+        <span class="osc-r" style="color:#ffd000" id="or-ch1">CH1: — V p-p</span>
+        <span class="osc-r" style="color:#00a2ff" id="or-ch2">CH2: — V p-p</span>
+        <span class="osc-r" style="color:var(--text-dim)" id="or-td">FREQ: 150kHz</span>
+        <span class="osc-r" style="color:var(--text-dim)" id="or-ph">Δφ: 0.0°</span>
+      </div>
+    </div>
+  </div><div id="pres-panel">
+    <div class="pres-inner">
+
+      <div class="pres-masthead">
+        <div class="mast-tag">Physics Lab — Interactive Simulation</div>
+        <div class="mast-title">Wireless Power Transfer</div>
+        <div class="mast-sub">Resonant Inductive Coupling · A Deep Dive</div>
+      </div>
+
+      <div class="pres-toc">
+        <div class="toc-label">Contents</div>
+        <div class="toc-item" onclick="scrollTo('sec1')">
+          <span class="toc-num">01</span>
+          <span class="toc-text">Introduction & Overview</span>
+        </div>
+        <div class="toc-item" onclick="scrollTo('sec2')">
+          <span class="toc-num">02</span>
+          <span class="toc-text">Faraday's Law of Induction</span>
+        </div>
+        <div class="toc-item" onclick="scrollTo('sec3')">
+          <span class="toc-num">03</span>
+          <span class="toc-text">Resonant Inductive Coupling</span>
+        </div>
+        <div class="toc-item" onclick="scrollTo('sec4')">
+          <span class="toc-num">04</span>
+          <span class="toc-text">The Magnetic Field Bridge</span>
+        </div>
+        <div class="toc-item" onclick="scrollTo('sec5')">
+          <span class="toc-num">05</span>
+          <span class="toc-text">Efficiency & Distance Drop-off</span>
+        </div>
+      </div>
+
+      <div class="pres-section" id="sec1">
+        <div class="sec-tag">01 / Introduction</div>
+        <div class="sec-title">Charging Without<br><em>Physical Contact</em></div>
+        <div class="sec-body">
+          Wireless power transfer (WPT) allows electrical energy to flow from a source to a load with <strong>zero physical connectors</strong>. The 3D simulation on the left models the most efficient known mechanism: <strong>Resonant Inductive Coupling</strong> — the same principle powering smartphone Qi chargers, electric vehicle charging pads, implantable medical devices, and even experimental drone recharging systems.
+        </div>
+        <div class="sec-body">
+          At its most fundamental level, the system consists of four key components: (1) an <strong>AC power source</strong> generating high-frequency oscillating current, (2) a <strong>transmitter coil</strong> (primary) that converts this current into an oscillating magnetic field, (3) a <strong>receiver coil</strong> (secondary) that intercepts that field and converts it back into electrical current, and (4) a <strong>load</strong> — in our simulation, a glowing LED — that consumes the transferred power.
+        </div>
+        <div class="sec-body">
+          Unlike basic transformer coupling (used in your wall adapter), resonant WPT adds <strong>LC tank circuits</strong> — inductor + capacitor pairs — tuned to the same natural resonant frequency on both coils. This shared oscillation dramatically widens the energy transfer channel, enabling efficient power delivery over distances several times the coil diameter. Think of it as two tuning forks placed far apart: strike one, and only the other with the matching pitch will vibrate strongly.
+        </div>
+        <div class="callout callout-tip">
+          💡 <strong>Try it now:</strong> Drag the <strong>Coil Distance</strong> slider and watch three things happen simultaneously: the LED dims, the particle field between the coils thins out, and the output waveform (blue) on the oscilloscope shrinks. All driven by the same physics model.
+        </div>
+        <div class="callout callout-info">
+          ⚡ <strong>Real-world context:</strong> Apple MagSafe charges at 15W over ~2mm. The Wireless Power Consortium (Qi) standard covers 0–5mm at 5–15W. MIT's 2007 experiment transferred 60W over 2 meters — a landmark that launched the modern WPT industry.
+        </div>
+        <div class="sec-divider"></div>
+      </div>
+
+      <div class="pres-section" id="sec2">
+        <div class="sec-tag">02 / Electromagnetic Induction</div>
+        <div class="sec-title">Faraday's Law of<br><em>Electromagnetic Induction</em></div>
+        <div class="sec-body">
+          All wireless power transfer traces back to Michael Faraday's discovery in 1831: a changing magnetic flux Φ through any closed conductor loop induces an electromotive force (EMF) in that loop. This is the heartbeat of every transformer, motor, generator, and wireless charger ever built. Without this law, the modern electrical world simply does not exist.
+        </div>
+
+        <div class="formula">
+          <div class="formula-tag">Faraday's Law of Induction</div>
+          <div class="formula-eq">ε = −N × (dΦ<sub>B</sub> / dt)</div>
+          <div class="formula-sub">
+            ε = induced EMF (volts) · N = number of wire turns in the coil<br>
+            dΦ<sub>B</sub>/dt = rate of change of magnetic flux (Webers/second)<br>
+            The minus sign encodes <em>Lenz's Law</em> (see below)
+          </div>
+        </div>
+
+        <div class="sec-body">
+          The formula reveals two engineering levers: <strong>more turns</strong> (higher N) or a <strong>faster-changing flux</strong> (higher dΦ/dt) both increase the induced voltage. This is precisely why WPT systems operate at 100 kHz–1 MHz rather than the 50/60 Hz grid frequency. At 150 kHz, the flux reverses direction 300,000 times per second, producing a dΦ/dt roughly 2,500× larger than at 60 Hz — so you can induce useful voltages with physically small coils and modest currents.
+        </div>
+        <div class="sec-body">
+          The <strong>negative sign</strong> is Lenz's Law in mathematical form: the induced current always flows in the direction that <em>opposes</em> the change in flux that created it. This is conservation of energy in action — nature resisting any "free lunch." In a WPT receiver, the secondary coil's induced current creates its own magnetic field that partially cancels the primary's field. This back-action is why moving the coils further apart (and thus reducing mutual flux) decreases output — the coupling weakens and less back-EMF limits the effective power transfer.
+        </div>
+
+        <div class="diagram">
+          <svg viewBox="0 0 340 100" xmlns="http://www.w3.org/2000/svg">
+            <text x="10" y="14" fill="#00e5ff" font-family="Share Tech Mono" font-size="8" opacity="0.65">PRIMARY (TX) — AC driven</text>
+            <path d="M10,58 Q22,36 34,58 Q46,80 58,58 Q70,36 82,58 Q94,80 106,58 Q118,36 130,58" stroke="#b87333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+            <text x="60" y="90" fill="#ffd000" font-family="Share Tech Mono" font-size="7" opacity="0.7" text-anchor="middle">~ AC source</text>
+            <path d="M70,18 C85,18 155,18 170,18" stroke="#00e5ff" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.4"/>
+            <path d="M70,100 C85,100 155,100 170,100" stroke="#00e5ff" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.4"/>
+            <path d="M70,58 L168,58" stroke="#ffd000" stroke-width="1.5" opacity="0.7"/>
+            <polygon points="165,55 174,58 165,61" fill="#ffd000" opacity="0.7"/>
+            <text x="108" y="52" fill="#ffd000" font-family="Share Tech Mono" font-size="7" opacity="0.7">Φ flux</text>
+            <text x="178" y="14" fill="#00a2ff" font-family="Share Tech Mono" font-size="8" opacity="0.65">SECONDARY (RX) — Induced</text>
+            <path d="M172,58 Q184,36 196,58 Q208,80 220,58 Q232,36 244,58 Q256,80 268,58 Q280,36 292,58 Q304,80 316,58 Q328,36 340,58" stroke="#7a9ecc" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+            <text x="240" y="82" fill="#69ff47" font-family="Share Tech Mono" font-size="7.5" opacity="0.8" text-anchor="middle">ε = −N·dΦ/dt</text>
+            <text x="240" y="96" fill="#69ff47" font-family="Share Tech Mono" font-size="7" opacity="0.5" text-anchor="middle">powers the LED</text>
+          </svg>
+        </div>
+
+        <div class="sec-body">
+          The <strong>mutual inductance M</strong> between the two coils quantifies how much of the primary's flux actually threads through the secondary. It depends on coil geometry, number of turns, and separation distance. The induced EMF on the secondary is simply: <em>ε₂ = −M × (dI₁/dt)</em>, where I₁ is the primary current. A higher M means more coupling — and more power transferred.
+        </div>
+
+        <div class="callout callout-info">
+          ⚡ <strong>Key insight:</strong> The oscilloscope's <strong>yellow CH1 wave</strong> shows the primary's AC voltage. The <strong>blue CH2 wave</strong> is the induced voltage at the receiver — notice it's smaller in amplitude (energy lost to resistance and coupling efficiency) and slightly <em>phase-shifted</em> (because inductive coupling introduces a 90° phase relationship at resonance).
+        </div>
+        <div class="sec-divider"></div>
+      </div>
+
+      <div class="pres-section" id="sec3">
+        <div class="sec-tag">03 / Resonant Inductive Coupling</div>
+        <div class="sec-title">Tuned to the<br><em>Same Frequency</em></div>
+        <div class="sec-body">
+          The genius of resonant WPT is adding capacitors to both coils to form <strong>LC resonators</strong> — series or parallel inductor–capacitor circuits that have a natural resonant frequency. Energy oscillates between the inductor's magnetic field and the capacitor's electric field, like a pendulum swinging between gravitational potential energy and kinetic energy. At resonance, this oscillation is self-sustaining with minimal energy injection needed per cycle.
+        </div>
+
+        <div class="formula">
+          <div class="formula-tag">LC Resonant Frequency</div>
+          <div class="formula-eq">f₀ = 1 / (2π√(LC))</div>
+          <div class="formula-sub">
+            L = inductance of the coil (Henrys)<br>
+            C = capacitance of the tuning capacitor (Farads)<br>
+            This simulation is fixed at f₀ = 150 kHz (resonance point)
+          </div>
+        </div>
+
+        <div class="sec-body">
+          When both the transmitter and receiver LC circuits share the <em>same resonant frequency</em>, they form a <strong>strongly-coupled resonator pair</strong>. Energy tunnels between them through their shared evanescent magnetic field with dramatically greater efficiency than non-resonant inductive coupling. The analogy is two wine glasses with identical pitch: tap one and sound pressure excites the other; the shared resonance dramatically amplifies the coupling.
+        </div>
+        <div class="sec-body">
+          Even moving 5–10% off the resonant frequency causes a steep collapse in coupling — this selectivity is described by the system's <strong>quality factor Q</strong>. A high-Q resonator stores energy very efficiently over many cycles (low resistance losses), while a low-Q resonator dissipates energy quickly. The WPT transfer bandwidth is approximately f₀/Q, so Q = 12 means the effective coupling is within roughly 12.5 kHz of center frequency.
+        </div>
+
+        <div class="formula">
+          <div class="formula-tag">Quality Factor Q</div>
+          <div class="formula-eq">Q = (1/R) × √(L/C) = ω₀L/R</div>
+          <div class="formula-sub">
+            R = series resistance of the coil (copper wire resistance)<br>
+            ω₀ = 2πf₀ = angular resonant frequency<br>
+            Higher Q = sharper resonance = better efficiency at f₀, worse off-resonance
+          </div>
+        </div>
+
+        <div class="formula">
+          <div class="formula-tag">Transfer Efficiency — kQ² Model</div>
+          <div class="formula-eq">η = (kQ)² / (1 + (kQ)²)</div>
+          <div class="formula-sub">
+            k = coupling coefficient (0 = no coupling, 1 = perfect coupling)<br>
+            Q = geometric mean of transmitter and receiver quality factors<br>
+            When kQ ≫ 1, efficiency → 1 (100%). When kQ ≪ 1, η ≈ (kQ)²
+          </div>
+        </div>
+
+        <div class="sec-body">
+          This kQ² model reveals the two paths to improving efficiency: either <strong>increase k</strong> (move coils closer, improve alignment, add ferrite cores to concentrate flux) or <strong>increase Q</strong> (use lower-resistance copper, Litz wire to mitigate skin effect, add ferrite shielding). Premium wireless chargers use Litz wire — bundles of individually insulated thin strands — precisely to maintain high Q at high frequencies where skin effect would otherwise dramatically increase resistance.
+        </div>
+
+        <div class="callout callout-tip">
+          💡 <strong>Observe on the oscilloscope:</strong> Set Distance to 3 cm (high coupling). The blue CH2 output wave should be large and nearly matching CH1 amplitude — high efficiency. Now increase Distance to 15 cm: CH2 collapses. The ratio of CH2 amplitude to CH1 amplitude is a direct visual representation of √η (square root of efficiency).
+        </div>
+        <div class="sec-divider"></div>
+      </div>
+
+      <div class="pres-section" id="sec4">
+        <div class="sec-tag">04 / The Magnetic Field</div>
+        <div class="sec-title">An Invisible<br><em>Bridge of Energy</em></div>
+        <div class="sec-body">
+          The glowing cyan particles arcing between the coils in the 3D simulation visualize the <strong>magnetic field lines</strong> — physically real but completely invisible, carrying power through empty space without any material medium. These are the "evanescent near-field" loops that couple both resonators across the air gap, threading magnetic flux from one coil through the other.
+        </div>
+        <div class="sec-body">
+          Unlike radio waves (which propagate outward at the speed of light, diverging and being permanently lost to space), near-field resonant coupling is <strong>non-radiative</strong>. The energy field remains localized around the coil system — it doesn't broadcast. A bystander device tuned to a different frequency captures essentially nothing. This locality is simultaneously the limitation (range) and the safety/security feature of WPT.
+        </div>
+
+        <div class="formula">
+          <div class="formula-tag">Ampère-Maxwell Law — Source of the Magnetic Field</div>
+          <div class="formula-eq">∇ × B = μ₀J + μ₀ε₀(∂E/∂t)</div>
+          <div class="formula-sub">
+            B = magnetic flux density (Tesla) · J = current density (A/m²)<br>
+            μ₀ = 4π×10⁻⁷ H/m (permeability of free space)<br>
+            The oscillating J in the primary coil wire is the sole source of B
+          </div>
+        </div>
+
+        <div class="sec-body">
+          On the axis of a circular coil (magnetic dipole), the field at axial distance r is given by the Biot-Savart law integrated over the loop. For a single circular loop of radius a carrying current I, the on-axis field is:
+        </div>
+
+        <div class="formula">
+          <div class="formula-tag">On-Axis Field of a Single Circular Loop</div>
+          <div class="formula-eq">B(r) = (μ₀Ia²) / (2(a² + r²)^(3/2))</div>
+          <div class="formula-sub">
+            a = loop radius · r = axial distance from loop center<br>
+            For r ≫ a (far field): B(r) ≈ (μ₀/4π)(2m/r³)<br>
+            m = Ia² = magnetic dipole moment. Field falls as <strong>1/r³</strong>
+          </div>
+        </div>
+
+        <div class="sec-body">
+          The <strong>r³ denominator</strong> is the critical physical fact governing WPT range. Compare to the inverse-square law (1/r²) of light propagation — the magnetic near-field falls off with distance <em>even faster</em>, one extra power of r. Doubling the separation reduces the field to 1/8 of its original strength. This is why even a 2× increase in coil distance causes dramatic efficiency loss, as seen in both the particle visualization and the oscilloscope output.
+        </div>
+        <div class="sec-body">
+          For our multi-turn coil (N turns, radius a), the effective dipole moment is m = NIA, where A = πa² is the loop area. This means more turns and larger coil radius both directly increase the field strength and range — the fundamental design tradeoff in WPT: <strong>bigger coils with more turns transfer power further</strong>, but at the cost of size, weight, and cost.
+        </div>
+
+        <div class="callout callout-info">
+          🔵 <strong>In the simulation:</strong> The particle arc height and density both encode this r³ relationship. As Distance increases, arcs flatten and thin out. The arc geometry mirrors the actual equipotential lines of the magnetic dipole field around a real coil — they close in tight loops near the coil and spread wide in the mid-field zone.
+        </div>
+        <div class="sec-divider"></div>
+      </div>
+
+      <div class="pres-section" id="sec5">
+        <div class="sec-tag">05 / Efficiency & Distance</div>
+        <div class="sec-title">The <em>Inverse-Cube</em><br>Drop-Off</div>
+        <div class="sec-body">
+          The magnetic dipole field's r³ dependence directly governs the coupling coefficient k. As derived from Neumann's formula for mutual inductance between coaxial loops, the coupling coefficient for two identical circular coils of radius a separated by distance d is approximately:
+        </div>
+
+        <div class="formula">
+          <div class="formula-tag">Coupling Coefficient vs Separation (coaxial coils)</div>
+          <div class="formula-eq">k(d) ≈ k₀ × (d₀/d)^2.8</div>
+          <div class="formula-sub">
+            d = center-to-center coil separation<br>
+            d₀ = reference distance where k = k₀ (typically coil radius)<br>
+            Exponent ~2.8–3.0 for coaxial circular coils of equal size<br>
+            This simulation uses this exact model — check the COUPLING k readout
+          </div>
+        </div>
+
+        <div class="sec-body">
+          The steep r^2.8 falloff means WPT is practically limited to distances of roughly <strong>1–3× the coil diameter</strong> for useful efficiency levels. Beyond this "mid-range," the kQ product drops below 1, and efficiency falls as (kQ)² — losing efficiency quadratically with further distance increase. Compare to light (inverse-square, 1/r²) or sound (1/r in certain geometries): the magnetic near-field is simply much more spatially confined.
+        </div>
+
+        <div class="formula">
+          <div class="formula-tag">Practical Efficiency vs Distance Model (this simulation)</div>
+          <div class="formula-eq">η(d) = (kQ)² / (1 + (kQ)²)</div>
+          <div class="formula-sub">
+            where k = distCoupling × freqCoupling<br>
+            distCoupling = 1 / (1 + (d/5.5)^2.8)<br>
+            η_max ≈ 90% at d = 1 cm · η drops to ~50% at d ≈ 5.5 cm<br>
+            η ≈ 5% at d = 15 cm · η ≈ 1% at d = 20 cm
+          </div>
+        </div>
+
+        <div class="sec-body">
+          <strong>Engineering countermeasures</strong> to the range problem include: <em>Ferrite cores</em> concentrate flux and can extend effective coupling by 2–4×. <em>Relay coils</em> (repeaters) placed mid-gap can extend range, acting like wireless power "routers." <em>Beam-forming phased arrays</em> of multiple coils can steer the field toward a receiver. <em>Impedance matching networks</em> keep the system at the optimal operating point as geometry changes. And <em>adaptive frequency tuning</em> can track the resonant frequency as mutual inductance shifts with position.
+        </div>
+        <div class="sec-body">
+          Interestingly, the steep distance falloff is also a <strong>valuable safety feature</strong>. Wireless chargers don't accidentally energize cardiac pacemakers across the room or interfere with other electronics beyond their immediate vicinity. Medical WPT systems for implantable devices (cochlear implants, retinal prosthetics, insulin pumps) deliberately use small, tightly-coupled coils held close to the skin — exploiting the short range for both efficiency and safety.
+        </div>
+
+        <div class="formula">
+          <div class="formula-tag">Standard Comparison — How fast does power drop?</div>
+          <div class="formula-eq">WPT near-field:  P ∝ 1/r⁶  (power ∝ k² ∝ 1/r^5.6)</div>
+          <div class="formula-sub">
+            Radio far-field: P ∝ 1/r² (inverse square law)<br>
+            Sound (free field): P ∝ 1/r²<br>
+            Gravity: F ∝ 1/r²<br>
+            WPT coupling is dramatically more distance-sensitive than any of these<br>
+            Halving distance → 64× stronger coupling power!
+          </div>
+        </div>
+
+        <div class="callout callout-tip">
+          💡 <strong>Final experiment — feel the physics:</strong> Set Input Voltage to 50 V. Slowly drag Distance from 1 cm to 20 cm and observe: (1) the LED dims from brilliant green to near-dark, (2) the blue CH2 wave on the oscilloscope shrinks dramatically relative to CH1, (3) the particle field between the coils thins out and flattens, (4) the EFFICIENCY readout in the System Monitor drops from ~90% to ~1%. This is the inverse-cube law made tangible.
+        </div>
+
+        <div class="callout callout-info">
+          📡 <strong>Industry benchmarks:</strong> Qi standard (phone charging) — 5W at 0–5mm, ~85% efficiency. WPC Extended Power Profile — 15W at 0–5mm. SAE J2954 (EV charging) — 3.3–11kW at 100–250mm gap, 85–90% efficiency. MIT 2007 experiment — 60W at 2m using 50cm coils, ~40% efficiency. NASA space-based solar — theoretical MW-class laser/microwave transmission over 36,000km.
+        </div>
+
+        <div class="pres-end">
+          <div class="pres-end-line" style="background: linear-gradient(90deg, transparent, var(--cyan));"></div>
+          <span class="pres-end-text">END OF PRESENTATION</span>
+          <div class="pres-end-line" style="background: linear-gradient(90deg, var(--cyan), transparent);"></div>
+        </div>
+      </div>
+
+    </div></div></div><script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+'use strict';
+
+// ============================================================
+//  SECTION 1: PHYSICS STATE & ENGINE
+// ============================================================
+const state = {
+  distance:     5,     // cm
+  frequency:    150,   // kHz
+  inputVoltage: 12,    // V
+  time:         0,
+  physics:      {}
+};
+
+const RESONANT_FREQ_KHZ = 150;
+
+/**
+ * Core physics model:
+ * - Coupling coefficient uses inverse-power law (r^2.8 approximation)
+ * - Frequency coupling uses Lorentzian resonance curve
+ * - Efficiency uses (kQ)² / (1 + (kQ)²)
+ */
+function computePhysics() {
+  const { distance, frequency, inputVoltage } = state;
+
+  // --- Distance coupling ---
+  // At d_ref cm, coupling = 0.5 (half-power point)
+  const D_REF = 5.5;
+  const distCoupling = 1 / (1 + Math.pow(distance / D_REF, 2.8));
+
+  // --- Frequency coupling (Lorentzian resonance peak) ---
+  const deltaF = (frequency - RESONANT_FREQ_KHZ) / RESONANT_FREQ_KHZ;
+  const Q      = 12; // quality factor
+  const freqCoupling = 1 / (1 + Math.pow(deltaF * Q * 2.0, 2));
+
+  // --- Combined coupling coefficient k ---
+  const k = Math.max(0, distCoupling * freqCoupling);
+
+  // --- Transfer efficiency (kQ model) ---
+  const kQ = k * Q;
+  const efficiency = (kQ * kQ) / (1 + kQ * kQ);
+
+  // --- Output voltage ---
+  const outputVoltage = inputVoltage * efficiency;
+
+  // --- LED brightness (0–1), gamma-corrected for visual punch ---
+  const ledBrightness = Math.pow(Math.min(1, outputVoltage / (inputVoltage * 0.90 + 0.001)), 0.65);
+
+  // --- Phase difference introduced at off-resonance ---
+  const phaseDiff = Math.atan(deltaF * Q * 2.0) * 1.8; // radians
+
+  // --- Status flag ---
+  const isResonant = Math.abs(deltaF) < 0.06;
+
+  state.physics = {
+    k, distCoupling, freqCoupling,
+    efficiency, outputVoltage,
+    ledBrightness, phaseDiff, isResonant
+  };
+
+  return state.physics;
+}
+
+// ============================================================
+//  SECTION 2: THREE.JS SETUP
+// ============================================================
+const simPanel = document.getElementById('sim-panel');
+const threeCanvas = document.getElementById('three-canvas');
+
+const renderer = new THREE.WebGLRenderer({
+  canvas: threeCanvas,
+  antialias: true,
+  powerPreference: 'high-performance'
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(simPanel.offsetWidth, simPanel.offsetHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050810);
+scene.fog = new THREE.FogExp2(0x050810, 0.028);
+
+const camera = new THREE.PerspectiveCamera(
+  58,
+  simPanel.offsetWidth / simPanel.offsetHeight,
+  0.01, 120
+);
+camera.position.set(0.5, 3.5, 9.5);
+camera.lookAt(0.5, 0, 0);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 2;
+controls.maxDistance = 25;
+controls.maxPolarAngle = Math.PI * 0.88;
+controls.target.set(0.5, 0.0, 0);
+
+// ============================================================
+//  SECTION 3: LIGHTING
+// ============================================================
+// Ambient fill
+const ambientLight = new THREE.AmbientLight(0x0d1e35, 3.5);
+scene.add(ambientLight);
+
+// Main key light (slightly blue-white, casts shadows)
+const keyLight = new THREE.DirectionalLight(0x8ab4ff, 1.2);
+keyLight.position.set(-6, 10, 6);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.camera.near = 0.5;
+keyLight.shadow.camera.far  = 40;
+keyLight.shadow.camera.left = keyLight.shadow.camera.bottom = -10;
+keyLight.shadow.camera.right = keyLight.shadow.camera.top  =  10;
+keyLight.shadow.bias = -0.001;
+scene.add(keyLight);
+
+// Warm rim light from right-back (copper warmth)
+const rimLight = new THREE.DirectionalLight(0xff9944, 0.5);
+rimLight.position.set(8, 3, -7);
+scene.add(rimLight);
+
+// Under-fill (subtle blue-teal from below)
+const underLight = new THREE.DirectionalLight(0x003366, 0.3);
+underLight.position.set(0, -5, 0);
+scene.add(underLight);
+
+// Dynamic lights (adjusted per physics state)
+const coil1Glow = new THREE.PointLight(0x0077ff, 0.4, 2.5);
+coil1Glow.position.set(-1.5, 0, 0);
+scene.add(coil1Glow);
+
+const coil2Glow = new THREE.PointLight(0x0077ff, 0.4, 2.5);
+coil2Glow.position.set(0.0, 0, 0); // updated by updateCoilPosition()
+scene.add(coil2Glow);
+
+const ledPointLight = new THREE.PointLight(0x39ff14, 0, 4.0);
+ledPointLight.position.set(2.5, 0, 0); // updated dynamically
+scene.add(ledPointLight);
+
+const sourceGlow = new THREE.PointLight(0x0055ff, 0.5, 2.0);
+sourceGlow.position.set(-4.5, 0, 0);
+scene.add(sourceGlow);
+
+// ============================================================
+//  SECTION 4: MATERIALS
+// ============================================================
+const matCopper = new THREE.MeshStandardMaterial({
+  color: 0xb87333, metalness: 0.95, roughness: 0.12,
+  emissive: 0x3a1800, emissiveIntensity: 0.05
+});
+
+const matCopper2 = matCopper.clone();  // secondary coil (separate for independent emissive)
+
+const matCoreDark = new THREE.MeshStandardMaterial({
+  color: 0x4a2208, metalness: 0.85, roughness: 0.35
+});
+
+const matPlatform = new THREE.MeshStandardMaterial({
+  color: 0x0d1828, metalness: 0.7, roughness: 0.35
+});
+
+const matSource = new THREE.MeshStandardMaterial({
+  color: 0x0c1830, metalness: 0.8, roughness: 0.3,
+  emissive: 0x001144, emissiveIntensity: 0.5
+});
+
+const matLedOn = new THREE.MeshStandardMaterial({
+  color: 0x112200,
+  metalness: 0.05, roughness: 0.35,
+  emissive: 0x39ff14, emissiveIntensity: 0.0
+});
+
+const matLedGlow = new THREE.MeshBasicMaterial({
+  color: 0x39ff14, transparent: true, opacity: 0.0, side: THREE.BackSide
+});
+
+const matLedBase = new THREE.MeshStandardMaterial({
+  color: 0x888888, metalness: 0.9, roughness: 0.2
+});
+
+const matWire = new THREE.LineBasicMaterial({ color: 0x336688, linewidth: 1 });
+
+const matGround = new THREE.MeshStandardMaterial({
+  color: 0x030810, metalness: 0.85, roughness: 0.5
+});
+
+// ============================================================
+//  SECTION 5: HELPER – CREATE HELIX COIL GEOMETRY
+// ============================================================
+/**
+ * Creates a helix-wound coil using TubeGeometry along a CatmullRom spline.
+ * The helix axis runs along the LOCAL Y direction.
+ * @param {number} turns       - Number of full turns
+ * @param {number} radius      - Winding radius
+ * @param {number} height      - Axial length of the coil
+ * @param {number} tubeR       - Wire tube radius
+ * @param {number} radialSegs  - Smoothness of tube cross-section
+ */
+function makeCoil(turns, radius, height, tubeR, radialSegs = 10) {
+  const pts = [];
+  const N   = turns * 72;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const θ = t * turns * Math.PI * 2;
+    pts.push(new THREE.Vector3(
+      Math.cos(θ) * radius,
+      (t - 0.5) * height,
+      Math.sin(θ) * radius
+    ));
+  }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  return new THREE.TubeGeometry(curve, N * 2, tubeR, radialSegs, false);
+}
+
+// ============================================================
+//  SECTION 6: BUILD 3D SCENE OBJECTS
+// ============================================================
+
+/* ── Ground plane ── */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 40),
+  matGround
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y  = -1.2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(36, 72, 0x001122, 0x001122);
+grid.position.y = -1.19;
+scene.add(grid);
+
+/* ── AC Power Source ── */
+const sourceGroup = new THREE.Group();
+scene.add(sourceGroup);
+
+const sourceBox = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 0.9), matSource);
+sourceBox.position.set(-4.5, -0.7, 0);
+sourceBox.castShadow = true;
+sourceGroup.add(sourceBox);
+
+// Screen panel on source
+const screenMat = new THREE.MeshStandardMaterial({
+  color: 0x002244, emissive: 0x003388, emissiveIntensity: 0.8,
+  metalness: 0.1, roughness: 0.6
+});
+const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.55), screenMat);
+screen.position.set(-4.5, -0.6, 0.46);
+sourceGroup.add(screen);
+
+// Glow indicator on source
+const indicatorMat = new THREE.MeshBasicMaterial({ color: 0x00aaff });
+const indicator = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), indicatorMat);
+indicator.position.set(-3.85, -0.25, 0.46);
+sourceGroup.add(indicator);
+
+// Source knobs
+for (let i = 0; i < 3; i++) {
+  const knob = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.04, 0.06, 8),
+    matCoreDark
+  );
+  knob.rotation.x = Math.PI / 2;
+  knob.position.set(-4.5 + (i - 1) * 0.3, -1.05, 0.46);
+  sourceGroup.add(knob);
+}
+
+/* ── Wire from source to primary coil ── */
+function addWire(points, mat, parent) {
+  const g = new THREE.BufferGeometry().setFromPoints(
+    points.map(p => new THREE.Vector3(...p))
+  );
+  parent.add(new THREE.Line(g, mat));
+}
+
+addWire([[-3.8,-0.7,0],[-3.0,-0.7,0],[-3.0,0.0,0],[-2.15,0.0,0]], matWire, scene);
+addWire([[-3.8,-1.2,0],[-3.0,-1.2,0],[-3.0,-0.7,0]], matWire, scene);
+
+/* ── Primary Coil Platform ── */
+const primaryPlatform = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.95, 0.95, 0.1, 32),
+  matPlatform
+);
+primaryPlatform.position.set(-1.5, -1.15, 0);
+primaryPlatform.castShadow = primaryPlatform.receiveShadow = true;
+scene.add(primaryPlatform);
+
+// Support column for primary
+const primSupport = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.08, 0.1, 0.95, 12),
+  matCoreDark
+);
+primSupport.position.set(-1.5, -0.7, 0);
+scene.add(primSupport);
+
+/* ── Primary Coil (Transmitter) ── */
+const primaryCore = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.10, 0.10, 1.5, 16),
+  matCoreDark
+);
+primaryCore.position.set(-1.5, 0, 0);
+primaryCore.rotation.z = Math.PI / 2;
+primaryCore.castShadow = true;
+scene.add(primaryCore);
+
+const primaryCoilGeom = makeCoil(9, 0.50, 1.4, 0.028);
+const primaryCoilMesh = new THREE.Mesh(primaryCoilGeom, matCopper);
+primaryCoilMesh.position.set(-1.5, 0, 0);
+primaryCoilMesh.rotation.z = Math.PI / 2;
+primaryCoilMesh.castShadow = true;
+scene.add(primaryCoilMesh);
+
+/* ── Secondary Group (Receiver – moves with distance slider) ── */
+const secondaryGroup = new THREE.Group();
+secondaryGroup.position.x = 0; // set in updateCoilPosition()
+scene.add(secondaryGroup);
+
+// Secondary platform
+const secPlatform = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.95, 0.95, 0.1, 32),
+  matPlatform
+);
+secPlatform.position.set(0, -1.15, 0);
+secPlatform.castShadow = secPlatform.receiveShadow = true;
+secondaryGroup.add(secPlatform);
+
+// Support column
+const secSupport = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.08, 0.1, 0.95, 12),
+  matCoreDark
+);
+secSupport.position.set(0, -0.7, 0);
+secondaryGroup.add(secSupport);
+
+// Secondary coil core
+const secondaryCore = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.10, 0.10, 1.5, 16),
+  matCoreDark
+);
+secondaryCore.position.set(0, 0, 0);
+secondaryCore.rotation.z = Math.PI / 2;
+secondaryGroup.add(secondaryCore);
+
+// Secondary coil
+const secondaryCoilGeom = makeCoil(9, 0.50, 1.4, 0.028);
+const secondaryCoilMesh = new THREE.Mesh(secondaryCoilGeom, matCopper2);
+secondaryCoilMesh.position.set(0, 0, 0);
+secondaryCoilMesh.rotation.z = Math.PI / 2;
+secondaryCoilMesh.castShadow = true;
+secondaryGroup.add(secondaryCoilMesh);
+
+/* ── Load capacitor (visual) ── */
+const capMat = new THREE.MeshStandardMaterial({
+  color: 0x223344, metalness: 0.6, roughness: 0.4, emissive: 0x001133, emissiveIntensity: 0.4
+});
+const capBox = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.35, 0.18), capMat);
+capBox.position.set(-0.8, 0, 0.5);
+secondaryGroup.add(capBox);
+
+/* ── LED Load (inside secondary group, moves with it) ── */
+const ledGroup = new THREE.Group();
+ledGroup.position.set(2.2, 0, 0);
+secondaryGroup.add(ledGroup);
+
+// LED bulb body
+const ledBody = new THREE.Mesh(
+  new THREE.SphereGeometry(0.28, 20, 20),
+  matLedOn
+);
+ledBody.castShadow = true;
+ledGroup.add(ledBody);
+
+// LED glow sphere (renders on back face to create halo)
+const ledGlowSphere = new THREE.Mesh(
+  new THREE.SphereGeometry(0.52, 16, 16),
+  matLedGlow
+);
+ledGroup.add(ledGlowSphere);
+
+// LED base/stem
+const ledStem = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.06, 0.09, 0.35, 12),
+  matLedBase
+);
+ledStem.position.y = -0.38;
+ledGroup.add(ledStem);
+
+// Load resistor/receiver board
+const boardMat = new THREE.MeshStandardMaterial({
+  color: 0x0a2010, metalness: 0.3, roughness: 0.7, emissive: 0x001100, emissiveIntensity: 0.2
+});
+const board = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.7), boardMat);
+board.position.set(2.2, -0.8, 0);
+secondaryGroup.add(board);
+
+// Load wires (local to secondary group)
+addWire([[0, -0.85, 0.1],[2.2,-0.85,0.1],[2.2,-0.65,0.1]], matWire, secondaryGroup);
+addWire([[0, -0.9, -0.1],[2.2,-0.9,-0.1],[2.2,-0.75,-0.1]], matWire, secondaryGroup);
+
+// LED point light (inside secondary group)
+const ledLightInGroup = new THREE.PointLight(0x39ff14, 0, 3.5);
+ledLightInGroup.position.set(2.2, 0, 0);
+secondaryGroup.add(ledLightInGroup);
+
+// ============================================================
+//  SECTION 7: PARTICLE SYSTEM – MAGNETIC FIELD VISUALIZATION
+// ============================================================
+const NUM_LINES    = 14;   // number of arc field lines
+const PTS_PER_LINE = 28;   // particles per arc
+const TOTAL_PARTS  = NUM_LINES * PTS_PER_LINE;
+
+const pPositions = new Float32Array(TOTAL_PARTS * 3);
+const pSizes     = new Float32Array(TOTAL_PARTS);
+
+const pGeom = new THREE.BufferGeometry();
+pGeom.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+pGeom.setAttribute('aSize',    new THREE.BufferAttribute(pSizes, 1));
+
+const pVertShader = `
+  attribute float aSize;
+  void main() {
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = aSize * (280.0 / -mvPos.z);
+    gl_Position  = projectionMatrix * mvPos;
+  }
+`;
+
+const pFragShader = `
+  uniform vec3  uColor;
+  uniform float uOpacity;
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    float a = (0.5 - d) * 2.0 * uOpacity;
+    gl_FragColor = vec4(uColor, a);
+  }
+`;
+
+const pMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uColor:   { value: new THREE.Color(0x00ccff) },
+    uOpacity: { value: 0.8 }
+  },
+  vertexShader:   pVertShader,
+  fragmentShader: pFragShader,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+const particleSystem = new THREE.Points(pGeom, pMat);
+scene.add(particleSystem);
+
+// Pre-compute per-line data for variation
+const lineData = Array.from({ length: NUM_LINES }, (_, i) => ({
+  angle:      (i / NUM_LINES) * Math.PI * 2,
+  rVariation: 0.75 + Math.random() * 0.5,
+  hVariation: 0.8  + Math.random() * 0.4,
+  speed:      0.12 + Math.random() * 0.10,
+  phase:      Math.random() * Math.PI * 2
+}));
+
+/**
+ * Animates particles along arcing paths between the coil centers.
+ * Particle opacity and arc radius scale with the coupling coefficient k.
+ */
+function updateParticles(time) {
+  const { k } = state.physics;
+  const primaryX   = -1.5;                         // world x of primary coil center
+  const secondaryX = secondaryGroup.position.x;   // world x of secondary coil center
+  const span       = secondaryX - primaryX;
+  const arcHeight  = Math.max(Math.abs(span) * 0.45, 0.6);
+
+  for (let l = 0; l < NUM_LINES; l++) {
+    const ld  = lineData[l];
+    const cosA = Math.cos(ld.angle);
+    const sinA = Math.sin(ld.angle);
+
+    for (let p = 0; p < PTS_PER_LINE; p++) {
+      const idx  = (l * PTS_PER_LINE + p) * 3;
+      const sidx = l * PTS_PER_LINE + p;
+
+      // Parametric t: each line's particles flow at line speed + offset
+      const t    = ((p / PTS_PER_LINE) + time * ld.speed + ld.phase) % 1.0;
+      const sinT = Math.sin(t * Math.PI);   // 0 → 1 → 0 (arc envelope)
+
+      const x = primaryX + span * t;
+      const r = sinT * arcHeight * ld.rVariation * Math.sqrt(k);
+
+      pPositions[idx]     = x;
+      pPositions[idx + 1] = cosA * r * ld.hVariation;
+      pPositions[idx + 2] = sinA * r;
+
+      // Particle size: peaks at arc midpoint, scales with coupling
+      pSizes[sidx] = (0.4 + sinT * 0.8) * k * 14;
+    }
+  }
+
+  pGeom.attributes.position.needsUpdate = true;
+  pGeom.attributes.aSize.needsUpdate    = true;
+  pMat.uniforms.uOpacity.value = Math.max(0.05, k * 0.85);
+}
+
+// ============================================================
+//  SECTION 8: COIL POSITION UPDATE
+// ============================================================
+/**
+ * Maps slider distance (cm) to world-space X position for the secondary group.
+ * Uses a sqrt-like curve so small distances are visually clear.
+ */
+function distToWorldX(d_cm) {
+  const t = (d_cm - 1) / 19;  // 0 at 1 cm, 1 at 20 cm
+  const gap = 0.65 + t * 3.85; // gap ranges from 0.65 to 4.5 world units
+  return -1.5 + gap;           // primary center is at x = -1.5
+}
+
+function updateCoilPosition() {
+  const wx = distToWorldX(state.distance);
+  secondaryGroup.position.x = wx;
+  coil2Glow.position.x      = wx;
+}
+
+// ============================================================
+//  SECTION 9: VISUAL FEEDBACK UPDATE
+// ============================================================
+function updateVisuals() {
+  const { k, ledBrightness, outputVoltage, isResonant, efficiency } = state.physics;
+
+  // --- LED ---
+  matLedOn.emissiveIntensity = ledBrightness * 3.5;
+  matLedOn.color.setHSL(0.28 + ledBrightness * 0.04, 1.0, 0.04 + ledBrightness * 0.36);
+  matLedGlow.opacity  = ledBrightness * 0.45;
+  ledLightInGroup.intensity = ledBrightness * 4.5;
+
+  // --- Coil glow (primary always active, secondary scales with k) ---
+  const t = state.time;
+  coil1Glow.intensity = 0.25 + 0.20 * Math.abs(Math.sin(t * state.frequency * 0.0025));
+  coil2Glow.intensity = k * 0.35;
+
+  matCopper.emissiveIntensity  = 0.05 + 0.04 * Math.abs(Math.sin(t * state.frequency * 0.0025));
+  matCopper2.emissiveIntensity = k * 0.12;
+
+  // --- Source indicator pulse ---
+  indicator.material.color.setHSL(0.6, 1, 0.3 + 0.25 * Math.abs(Math.sin(t * 12)));
+
+  // --- Status display ---
+  const effPct = (efficiency * 100).toFixed(1);
+  document.getElementById('sv-eff').textContent  = effPct + '%';
+  document.getElementById('sv-vout').textContent = outputVoltage.toFixed(2) + ' V';
+  document.getElementById('sv-k').textContent    = k.toFixed(3);
+
+  const statusEl = document.getElementById('sv-status');
+  statusEl.textContent  = isResonant ? 'RESONANT' : 'OFF-TUNE';
+  statusEl.className    = 's-value ' + (isResonant ? 'good' : 'warn');
+
+  const effEl = document.getElementById('sv-eff');
+  effEl.className = 's-value ' + (efficiency > 0.55 ? 'good' : efficiency > 0.25 ? 'warn' : 'danger');
+}
+
+// ============================================================
+//  SECTION 10: OSCILLOSCOPE
+// ============================================================
+const oscCanvas = document.getElementById('osc-canvas');
+const oscCtx    = oscCanvas.getContext('2d');
+
+// Stable phase accumulator — increments smoothly each frame, no modulo jumps
+let oscPhase = 0;
+
+/** Resize the oscilloscope canvas to fit its container */
+function resizeOsc() {
+  const panel  = document.getElementById('osc-panel');
+  const innerW = panel.clientWidth - 22;
+  // panel height minus: top pad + bottom pad + header + legend + readouts
+  const innerH = 206 - 9 - 9 - 22 - 30 - 20;
+  oscCanvas.width  = Math.max(1, innerW);
+  oscCanvas.height = Math.max(1, innerH);
+}
+
+resizeOsc();
+
+/**
+ * Renders the dual-channel oscilloscope with full auto-scaling.
+ * Uses a smooth phase accumulator to prevent flickering at any frequency.
+ * CH1 = input waveform (yellow/gold)   CH2 = output waveform (cyan-blue)
+ * @param {number} delta - seconds elapsed since last frame
+ */
+function drawOscilloscope(delta) {
+  const { inputVoltage, frequency } = state;
+  const { outputVoltage, phaseDiff } = state.physics;
+
+  const W = oscCanvas.width;
+  const H = oscCanvas.height;
+  if (W < 2 || H < 2) return;
+
+  // ── Auto-Trigger ──
+  // Locking the phase to 0 acts as a perfect software trigger, eliminating flicker.
+  oscPhase = 0;
+
+  // ── Auto-Set calculations ──────────────────────────────────
+  const maxAmp      = Math.max(Math.abs(inputVoltage), 0.01);
+  const yScale      = (H * 0.42) / maxAmp;   // pixels/volt, ±amplitude fits in 84% height
+  const cyclesShown = 2.5;                    // always show 2.5 full cycles
+  // ───────────────────────────────────────────────────────────
+
+  // Clear background
+  oscCtx.fillStyle = '#010608';
+  oscCtx.fillRect(0, 0, W, H);
+
+  // ── Grid ──────────────────────────────────────────────────
+  const COLS = 10, ROWS = 8;
+
+  oscCtx.strokeStyle = 'rgba(0,200,255,0.07)';
+  oscCtx.lineWidth   = 0.5;
+  for (let c = 0; c <= COLS; c++) {
+    const x = (c / COLS) * W;
+    oscCtx.beginPath(); oscCtx.moveTo(x, 0); oscCtx.lineTo(x, H); oscCtx.stroke();
+  }
+  for (let r = 0; r <= ROWS; r++) {
+    const y = (r / ROWS) * H;
+    oscCtx.beginPath(); oscCtx.moveTo(0, y); oscCtx.lineTo(W, y); oscCtx.stroke();
+  }
+
+  // Center horizontal axis
+  const cy = H / 2;
+  oscCtx.strokeStyle = 'rgba(0,229,255,0.18)';
+  oscCtx.lineWidth   = 1;
+  oscCtx.beginPath(); oscCtx.moveTo(0, cy); oscCtx.lineTo(W, cy); oscCtx.stroke();
+  oscCtx.beginPath(); oscCtx.moveTo(W/2, 0); oscCtx.lineTo(W/2, H); oscCtx.stroke();
+
+  // CRT scanline overlay
+  oscCtx.fillStyle = 'rgba(0,0,0,0.03)';
+  for (let sl = 0; sl < H; sl += 3) {
+    oscCtx.fillRect(0, sl, W, 1);
+  }
+
+  // ── Waveforms ──────────────────────────────────────────────
+  const N = W;
+  // The phase at pixel i maps 'cyclesShown' full cycles across the canvas width.
+
+  // CH1 — Input (yellow/gold)
+  oscCtx.beginPath();
+  oscCtx.strokeStyle = '#ffd000';
+  oscCtx.lineWidth   = 1.8;
+  oscCtx.shadowColor = '#ffd000';
+  oscCtx.shadowBlur  = 5;
+
+  for (let i = 0; i <= N; i++) {
+    const phaseAtPixel = (i / N) * cyclesShown * 2 * Math.PI + oscPhase;
+    const v  = inputVoltage * Math.sin(phaseAtPixel);
+    const px = i;
+    const py = cy - v * yScale;
+    i === 0 ? oscCtx.moveTo(px, py) : oscCtx.lineTo(px, py);
+  }
+  oscCtx.stroke();
+
+  // CH2 — Output (cyan-blue), with phase offset from physics
+  oscCtx.beginPath();
+  oscCtx.strokeStyle = '#00a2ff';
+  oscCtx.lineWidth   = 1.8;
+  oscCtx.shadowColor = '#00a2ff';
+  oscCtx.shadowBlur  = 5;
+
+  for (let i = 0; i <= N; i++) {
+    const phaseAtPixel = (i / N) * cyclesShown * 2 * Math.PI + oscPhase - phaseDiff;
+    const v  = outputVoltage * Math.sin(phaseAtPixel);
+    const px = i;
+    const py = cy - v * yScale;
+    i === 0 ? oscCtx.moveTo(px, py) : oscCtx.lineTo(px, py);
+  }
+  oscCtx.stroke();
+
+  oscCtx.shadowBlur = 0;
+
+  // ── Voltage axis labels ────────────────────────────────────
+  oscCtx.fillStyle = 'rgba(0,229,255,0.35)';
+  oscCtx.font      = `8px 'Share Tech Mono', monospace`;
+  oscCtx.textAlign = 'left';
+
+  [maxAmp, maxAmp * 0.5, 0, -maxAmp * 0.5, -maxAmp].forEach(v => {
+    const py = cy - v * yScale;
+    if (py > 4 && py < H - 4) {
+      oscCtx.fillText(v.toFixed(1) + 'V', 3, py - 2);
+    }
+  });
+
+  // ── Update readout text ────────────────────────────────────
+  document.getElementById('or-ch1').textContent =
+    `CH1: ${inputVoltage.toFixed(1)}V p-p`;
+  document.getElementById('or-ch2').textContent =
+    `CH2: ${outputVoltage.toFixed(2)}V p-p`;
+  document.getElementById('or-td').textContent  =
+    `FREQ: ${frequency.toFixed(1)}kHz`;
+  document.getElementById('or-ph').textContent  =
+    `Δφ: ${(phaseDiff * 180 / Math.PI).toFixed(1)}°`;
+}
+
+// ============================================================
+//  SECTION 11: SLIDER EVENT HANDLERS
+// ============================================================
+function initSliders() {
+  document.getElementById('sl-dist').addEventListener('input', e => {
+    state.distance = parseFloat(e.target.value);
+    document.getElementById('vd').textContent = state.distance.toFixed(1) + ' cm';
+    computePhysics();
+    updateCoilPosition();
+  });
+
+  document.getElementById('sl-volt').addEventListener('input', e => {
+    state.inputVoltage = parseFloat(e.target.value);
+    document.getElementById('vv').textContent = state.inputVoltage.toFixed(1) + ' V';
+    computePhysics();
+  });
+
+  document.getElementById('sl-freq').addEventListener('input', e => {
+    state.frequency = parseFloat(e.target.value);
+    document.getElementById('vf').textContent = state.frequency.toFixed(1) + ' kHz';
+    computePhysics();
+  });
+}
+
+// ============================================================
+//  SECTION 12: SCROLL ANIMATIONS
+// ============================================================
+function initScrollAnimations() {
+  const panel    = document.getElementById('pres-panel');
+  const sections = panel.querySelectorAll('.pres-section');
+
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('vis'); });
+  }, { root: panel, threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+  sections.forEach(s => obs.observe(s));
+
+  // Trigger sections already in view on load
+  setTimeout(() => {
+    sections.forEach(s => {
+      const rect = s.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      if (rect.top < panelRect.bottom) s.classList.add('vis');
+    });
+  }, 800);
+}
+
+// Scroll to section helper (called by TOC items)
+function scrollTo(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ============================================================
+//  SECTION 13: RESIZE HANDLER
+// ============================================================
+function onResize() {
+  const w = simPanel.offsetWidth;
+  const h = simPanel.offsetHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  resizeOsc();
+}
+
+window.addEventListener('resize', onResize);
+
+// ============================================================
+//  SECTION 11b: DRAGGABLE PANELS
+// ============================================================
+/**
+ * Makes a glass panel draggable by its .drag-handle child.
+ * Constrains movement to within the sim-panel bounds.
+ */
+function makeDraggable(panelId) {
+  const panel  = document.getElementById(panelId);
+  const handle = panel.querySelector('.drag-handle');
+  if (!handle) return;
+
+  let isDragging = false;
+  let startX = 0, startY = 0;
+  let startLeft = 0, startTop = 0;
+
+  // Convert current position to top/left absolute coords on first drag
+  function getAbsolutePos() {
+    const r = panel.getBoundingClientRect();
+    const p = panel.offsetParent.getBoundingClientRect();
+    return { left: r.left - p.left, top: r.top - p.top };
+  }
+
+  handle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+
+    // Snap panel from CSS-anchored to absolute top/left coordinates
+    const pos = getAbsolutePos();
+    panel.style.left   = pos.left + 'px';
+    panel.style.top    = pos.top  + 'px';
+    panel.style.bottom = 'auto';
+    panel.style.right  = 'auto';
+
+    startLeft = pos.left;
+    startTop  = pos.top;
+
+    panel.classList.add('dragging-panel');
+    document.body.style.cursor = 'move';
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+
+    const parentW = panel.offsetParent.clientWidth;
+    const parentH = panel.offsetParent.clientHeight;
+    const pw = panel.offsetWidth;
+    const ph = panel.offsetHeight;
+
+    const newLeft = Math.max(0, Math.min(parentW - pw, startLeft + dx));
+    const newTop  = Math.max(0, Math.min(parentH - ph, startTop  + dy));
+
+    panel.style.left = newLeft + 'px';
+    panel.style.top  = newTop  + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    panel.classList.remove('dragging-panel');
+    document.body.style.cursor = '';
+  });
+}
+
+// ============================================================
+//  SECTION 14: MAIN ANIMATION LOOP
+// ============================================================
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const delta  = Math.min(clock.getDelta(), 0.05);
+  state.time  += delta;
+
+  updateVisuals();
+  updateParticles(state.time);
+  drawOscilloscope(delta);   // pass delta, not time — phase accumulator handles timing
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+//  SECTION 15: INITIALIZATION
+// ============================================================
+function init() {
+  // Run initial physics computation
+  computePhysics();
+  updateCoilPosition();
+
+  // Wire up slider events
+  initSliders();
+
+  // Make panels draggable by their title bars
+  makeDraggable('status-panel');
+  makeDraggable('control-panel');
+
+  // Scroll animations for presentation
+  initScrollAnimations();
+
+  // Start render loop
+  animate();
+
+  // Dismiss loading screen with fade
+  setTimeout(() => {
+    const loading = document.getElementById('loading');
+    const app     = document.getElementById('app');
+    loading.style.opacity = '0';
+    app.style.opacity     = '1';
+    setTimeout(() => { loading.style.display = 'none'; }, 500);
+  }, 1300);
+}
+
+init();
+</script>
+</body>
+</html>
